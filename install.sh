@@ -177,8 +177,26 @@ User=root
 WantedBy=multi-user.target
 SERVICE
 
+cat > /etc/systemd/system/xhttp-saas-webhook.service <<SERVICE
+[Unit]
+Description=XHTTP SaaS Mercado Pago Webhook
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=$APP_DIR
+ExecStart=/usr/bin/php -S 127.0.0.1:8090 webhook.php
+Restart=always
+RestartSec=5
+User=root
+
+[Install]
+WantedBy=multi-user.target
+SERVICE
+
 systemctl daemon-reload
 systemctl enable xhttp-saas.service
+systemctl enable xhttp-saas-webhook.service
 
 echo
 echo "========================================"
