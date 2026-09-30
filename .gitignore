@@ -1,0 +1,9 @@
+.env
+data/
+vendor/
+ssl/
+*.log
+*.bak*
+*.backup*
+bot.php.backup*
+composer.phar
