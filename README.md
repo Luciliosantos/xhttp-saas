@@ -45,3 +45,21 @@ Nunca publicar tokens do Telegram, Access Token do Mercado Pago, senhas SSH, cha
 ## Repositório
 
 https://github.com/Luciliosantos/xhttp-saas
+
+## ⚡ Instalação automática
+
+Em uma VPS nova, execute como root:
+
+```bash
+bash <(curl -fsSL https://raw.githubusercontent.com/Luciliosantos/xhttp-saas/main/install.sh)
+```
+
+O instalador configura automaticamente PHP, Composer, banco SQLite, bot, webhook, serviço systemd e Nginx.
+
+### Webhook
+
+O webhook utiliza a porta 8443. Os certificados devem ficar em `ssl/origin.crt` e `ssl/origin.key`.
+
+### Segurança
+
+Nunca publique tokens, senhas SSH, Access Token do Mercado Pago ou chaves privadas no GitHub.
