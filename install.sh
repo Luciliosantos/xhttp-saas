@@ -198,6 +198,49 @@ systemctl daemon-reload
 systemctl enable xhttp-saas.service
 systemctl enable xhttp-saas-webhook.service
 
+echo "[WEBHOOK] Configurando Nginx..."
+
+if [ -f "$APP_DIR/ssl/origin.crt" ] && [ -f "$APP_DIR/ssl/origin.key" ]; then
+
+    WEBHOOK_DOMAIN="${MP_DOMAIN:-mp.lsnet.shop}"
+
+    cat > /etc/nginx/sites-available/xhttp-saas-webhook <<NGINX
+server {
+    listen 8443 ssl;
+    server_name ${WEBHOOK_DOMAIN};
+
+    ssl_certificate ${APP_DIR}/ssl/origin.crt;
+    ssl_certificate_key ${APP_DIR}/ssl/origin.key;
+
+    location / {
+        proxy_pass http://127.0.0.1:8090;
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto https;
+    }
+}
+NGINX
+
+    ln -sf /etc/nginx/sites-available/xhttp-saas-webhook \
+        /etc/nginx/sites-enabled/xhttp-saas-webhook
+
+    nginx -t
+    systemctl enable nginx
+    systemctl restart nginx
+
+    echo "Nginx configurado em https://${WEBHOOK_DOMAIN}:8443/"
+else
+    echo "AVISO: certificado SSL não encontrado."
+    echo "Coloque os arquivos:"
+    echo "  $APP_DIR/ssl/origin.crt"
+    echo "  $APP_DIR/ssl/origin.key"
+    echo "e configure o Nginx posteriormente."
+fi
+
+systemctl start xhttp-saas-webhook.service
+systemctl restart xhttp-saas.service
+
 echo
 echo "========================================"
 echo "       INSTALAÇÃO PREPARADA"
