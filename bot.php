@@ -11,6 +11,38 @@ if (!file_exists($configFile)) {
 
 $config = require $configFile;
 
+// Carrega variáveis do arquivo .env
+$envFile = __DIR__ . '/.env';
+if (is_file($envFile)) {
+    foreach (file($envFile, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES) as $line) {
+        $line = trim($line);
+        if ($line === '' || str_starts_with($line, '#') || strpos($line, '=') === false) {
+            continue;
+        }
+        [$key, $value] = explode('=', $line, 2);
+        $key = trim($key);
+        $value = trim($value);
+        if ($key !== '' && getenv($key) === false) {
+            putenv($key . '=' . $value);
+        }
+    }
+}
+
+$envFile = __DIR__ . '/.env';
+if (is_file($envFile)) {
+    foreach (file($envFile, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES) as $line) {
+        if (strpos($line, '=') === false || str_starts_with(trim($line), '#')) {
+            continue;
+        }
+        [$key, $value] = explode('=', $line, 2);
+        $key = trim($key);
+        $value = trim($value);
+        if ($key !== '' && getenv($key) === false) {
+            putenv($key . '=' . $value);
+        }
+    }
+}
+
 /*
 |--------------------------------------------------------------------------
 | CONFIG
@@ -34,6 +66,10 @@ if (!$TOKEN && defined('BOT_TOKEN')) {
 
 if (!$TOKEN && isset($telegram_token)) {
     $TOKEN = $telegram_token;
+}
+
+if (!$TOKEN && getenv('BOT_TOKEN') !== false) {
+    $TOKEN = trim((string)getenv('BOT_TOKEN'));
 }
 
 if (!$TOKEN) {
@@ -125,9 +161,14 @@ function answerCallback($id)
 |--------------------------------------------------------------------------
 */
 
-function mainKeyboard()
+function mainKeyboard($chatId = null)
 {
-    return [
+    global $config;
+
+    $adminId = (string)($config['telegram']['admin_id'] ?? '');
+    $isAdmin = $adminId !== '' && $chatId !== null && (string)$chatId === $adminId;
+
+    $keyboard = [
         [
             [
                 'text' => '🖥️ Meus Servidores',
@@ -145,16 +186,20 @@ function mainKeyboard()
                 'text' => '💳 Minha assinatura',
                 'callback_data' => 'subscription'
             ]
-        ],
-        [
+        ]
+    ];
+
+    if ($isAdmin) {
+        $keyboard[] = [
             [
                 'text' => '⚙️ Administração',
                 'callback_data' => 'admin'
             ]
-        ]
-    ];
-}
+        ];
+    }
 
+    return $keyboard;
+}
 function serversKeyboard()
 {
     return [
@@ -577,6 +622,25 @@ $result = api('getUpdates', [
             $chat_id = $message['chat']['id'];
             $text = trim($message['text'] ?? '');
 
+$adminIdCheck = (string)($config['telegram']['admin_id'] ?? '');
+$isAdminCheck = $adminIdCheck !== '' && (string)$chat_id === $adminIdCheck;
+
+if (!$isAdminCheck && !subscriptionIsActive($chat_id)) {
+    if (
+        $text === '🖥️ Meus Servidores' ||
+        $text === '👤 Contas SSH'
+    ) {
+        sendMessage(
+            $chat_id,
+            "🔒 <b>Acesso bloqueado</b>\n\n" .
+            "Você precisa ter uma assinatura ativa para utilizar esta função.\n\n" .
+            "💳 Acesse <b>Minha assinatura</b> para contratar ou renovar."
+        );
+        continue;
+    }
+}
+
+
             if ($text === '/start') {
 
                 sendMessage(
@@ -584,7 +648,7 @@ $result = api('getUpdates', [
                     "🚀 <b>XHTTP SaaS</b>\n\n" .
                     "Bem-vindo ao sistema.\n\n" .
                     "Escolha uma opção abaixo:",
-                    mainKeyboard()
+                    mainKeyboard($chat_id)
                 );
 
                 continue;
@@ -601,7 +665,7 @@ $result = api('getUpdates', [
                 sendMessage(
                     $chat_id,
                     "❌ Operação cancelada.",
-                    mainKeyboard()
+                    mainKeyboard($chat_id)
                 );
 
                 continue;
@@ -621,6 +685,35 @@ $result = api('getUpdates', [
             $callback_id = $callback['id'];
             $data = $callback['data'] ?? '';
 
+    $chat_id = $callback['message']['chat']['id'];
+    $message_id = $callback['message']['message_id'];
+
+            $adminIdBlock = (string)($config['telegram']['admin_id'] ?? '');
+            $isAdminBlock = $adminIdBlock !== '' && (string)$chat_id === $adminIdBlock;
+
+            if (
+                !$isAdminBlock &&
+                !subscriptionIsActive($chat_id) &&
+                in_array($data, [
+                    'servers',
+                    'add_server',
+                    'accounts',
+                    'list_accounts',
+                    'create_account',
+                    'delete_account'
+                ], true)
+            ) {
+                editMessage(
+                    $chat_id,
+                    $message_id,
+                    "🔒 <b>Acesso bloqueado</b>\n\n" .
+                    "Você precisa ter uma assinatura ativa para utilizar esta função.\n\n" .
+                    "💳 Acesse <b>Minha assinatura</b> para contratar ou renovar."
+                );
+                continue;
+            }
+
+
             $chat_id = $callback['message']['chat']['id'];
             $message_id = $callback['message']['message_id'];
 
@@ -638,7 +731,7 @@ $result = api('getUpdates', [
                     $chat_id,
                     $message_id,
                     "🚀 <b>XHTTP SaaS</b>\n\nEscolha uma opção:",
-                    mainKeyboard()
+                    mainKeyboard($chat_id)
                 );
 
                 continue;
@@ -1054,6 +1147,18 @@ if ($data === 'confirm_renew_subscription') { $lines = file(__DIR__
                 $password = trim($m[4]);
 
                 $clientId = getClientId($chat_id);
+
+                $adminId = (string)($config['telegram']['admin_id'] ?? '');
+                $isAdmin = $adminId !== '' && (string)$chat_id === $adminId;
+
+                if (!$isAdmin && !subscriptionIsActive($chat_id)) {
+                    sendMessage(
+                        $chat_id,
+                        "🔒 <b>Assinatura necessária</b>\n\n" .
+                        "Você precisa ter uma assinatura ativa para cadastrar um servidor."
+                    );
+                    continue;
+                }
 
                 if ($clientId <= 0) {
                     sendMessage(
