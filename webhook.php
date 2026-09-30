@@ -17,6 +17,42 @@ file_put_contents(
     FILE_APPEND | LOCK_EX
 );
 
+
+function telegramSendMessage(string $chatId, string $message): void
+{
+    $token = trim((string)getenv('BOT_TOKEN'));
+
+    if ($token === '') {
+        throw new RuntimeException('BOT_TOKEN não configurado');
+    }
+
+    $url = 'https://api.telegram.org/bot' . $token . '/sendMessage';
+
+    $ch = curl_init($url);
+    curl_setopt_array($ch, [
+        CURLOPT_POST => true,
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_TIMEOUT => 15,
+        CURLOPT_POSTFIELDS => [
+            'chat_id' => $chatId,
+            'text' => $message,
+        ],
+    ]);
+
+    $response = curl_exec($ch);
+    $error = curl_error($ch);
+    $http = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+
+    if ($response === false || $error !== '') {
+        throw new RuntimeException('Erro Telegram: ' . $error);
+    }
+
+    if ($http < 200 || $http >= 300) {
+        throw new RuntimeException('Telegram HTTP ' . $http);
+    }
+}
+
 try {
 
     if (!is_array($data)) {
@@ -70,7 +106,7 @@ try {
         exit;
     }
 
-    $preferenceId = $payment->external_reference ?? '';
+    $externalReference = $payment->external_reference ?? '';
 
     if ($preferenceId === '') {
         echo json_encode(['ok' => true]);
@@ -89,11 +125,11 @@ try {
             c.telegram_id
         FROM payments p
         JOIN clients c ON c.id = p.client_id
-        WHERE p.preference_id = :preference_id
+        WHERE p.external_reference = :external_reference
         LIMIT 1
     ");
 
-    $stmt->bindValue(':preference_id', $preferenceId, SQLITE3_TEXT);
+    $stmt->bindValue(':external_reference', $externalReference, SQLITE3_TEXT);
 
     $result = $stmt->execute();
     $row = $result->fetchArray(SQLITE3_ASSOC);
